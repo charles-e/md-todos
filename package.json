@@ -1,0 +1,26 @@
+{
+  "name": "obsid-todo",
+  "version": "1.0.0",
+  "description": "todos for obsidian",
+  "main": "todo.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "keywords": [
+    "productivity",
+    "node"
+  ],
+  "author": "Charles Eubanks",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^6.1.0",
+    "markdown-it": "^11.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "moment": "^2.27.0",
+    "toml": "^3.0.0"
+  }
+}
