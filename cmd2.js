@@ -3,6 +3,7 @@
 //
 
 const { Command } = require("commander");
+const toml = require("toml");
 const moment = require("moment");
 const fs = require("fs");
 const path = require("path");
@@ -34,8 +35,19 @@ console.log(baseLoc);
 
 const configLoc = `${process.env.HOME}/.config/obsidian-todo/config.toml`;
 const config = toml.parse(fs.readFileSync(configLoc, 'utf-8'));
-baseLoc = config.baseDir;
+if (config.baseDir) {
+        baseLoc = config.baseDir;
+   if (!baseLoc.startsWith("/")) {
+        baseLoc = path.join(process.env.HOME, baseLoc);
+    }
+    console.log(`baseLoc = ${baseLoc}`);
+}
 genDir = config.genDir ?? GENDIR;
+const message = config.message;
+
+if (message) {
+    console.log(`This is the message: ${message}`);
+}
 
 const readPath = async (ret, dirLoc) => {
 
