@@ -147,7 +147,7 @@ const work = async () => {
             }
 
         }
-        const outPath = path.join(baseLoc, genDir, cat) + ".md";
+        const outPath = path.join(baseLoc, genDir, cat.toUpper()) + ".md";
         //        console.log(`writing to ${outPath}`);
         fs.writeFileSync(outPath, output, "UTF-8");
     }
