@@ -33,8 +33,9 @@ if (prog.dir) {
 baseLoc = path.normalize(baseLoc);
 
 console.log(baseLoc);
-
-const configLoc = `${process.env.HOME}/.config/obsidian-todo/config.toml`;
+const configDir = `${process.env.HOME}/.config/obsidian-todo`;
+const configLoc = `${configDir}/config.toml`;
+const cacheLoc = `${configDir}/cache.json`;
 const config = toml.parse(fs.readFileSync(configLoc, 'utf-8'));
 if (config.baseDir) {
     baseLoc = config.baseDir;
@@ -45,13 +46,8 @@ if (config.baseDir) {
 genDir = config.genDir ?? GENDIR;
 const genLoc = path.join(baseLoc, genDir);
 const dotLoc = path.join(baseLoc, '.obsidian');
-const message = config.message;
 
-if (message) {
-    console.log(`This is the message: ${message}`);
-}
-
-const readPath = async (ret, dirLoc) => {
+const readPath = async (ret, dirLoc, fileCache) => {
 
     let dirInfo;
     try {
@@ -61,60 +57,92 @@ const readPath = async (ret, dirLoc) => {
         console.log(err);
     }
     if (dirInfo === undefined) {
-        console.log('undefined');
+        console.log("undefined");
     }
     for await (const dirent of dirInfo) {
-        if (dirent.isFile() && dirent.name.endsWith(".md")) {
-            const fPath = path.join(baseLoc, dirLoc, dirent.name);
-            const fname = dirent.name.slice(0, -3);
-            fs.readFile(fPath, "utf8", (err, data) => {
-                if (err) { throw err; };
-                const todos = findAll(data, path.join(dirLoc, fname));
-
-                const dated = moment(fname, datefmt);
-                var byDate;
-                if (dated.isValid() && dated.year() > 2000) {
-                    byDate = ret.dated[fname] = [];
-                }
-                todos.map((task, n) => {
-                    if (task.done) {
-                        ret.done.push(task);
-                    }
-                    else {
-                        ret.pending.push(task);
-                    }
-                    if (byDate) {
-                        byDate.push(task);
-                    }
-                    const tags = findTags(task.item);
-                    tags.map(t => {
-                        if (!ret.tagged[t]) {
-                            ret.tagged[t] = [];
-                        }
-                        ret.tagged[t].push(task);
+        const fPathRelative = path.join(dirLoc, dirent.name);
+        const fPath = path.join(baseLoc, fPathRelative);
+        const fname = dirent.name.slice(0, -3);
+        if (dirent.isFile() && dirent.name.endsWith(".md") && watchedPath(fPath)) {
+            var stats;
+            try {
+                const fd = fs.openSync(fPath);
+                stats = fs.fstatSync(fd);
+                fs.closeSync(fd);
+            } catch (e) { }
+            var lastTouch;
+            if (stats) {
+                lastTouch = fileCache[fPathRelative] && fileCache[fPathRelative].touch;
+            }
+            /* Only bother to read the file if its new (not in cache) or
+                if the modify timestamp is newer than cached
+            */
+            var todos = [];
+            if (lastTouch && lastTouch < stats.mTimeMs) {
+                todos = fileCache[fPathRelative].todos;
+            } else {
+                const data = fs.readFileSync(fPath, "utf8");
+                todos = findAll(data, path.join(dirLoc, fname));
+                if (todos.length > 0) {
+                    todos = todos.map((task, n) => {
+                        task.touched = stats.mTimeMs;
+                        task.changed = true;
+                        return task;
                     });
-
-                });
-                /* for (const t in todos) {
-                    if (todos[t].done == false) {
-                        console.log(todos[t].item);
+                    fileCache[fPathRelative] = {
+                        touch: stats.mTimeMs,
+                        todos: todos
+                    };
+                }
+            }
+            const dated = moment(fname, datefmt);
+            var byDate;
+            if (dated.isValid() && dated.year() > 2000) {
+                byDate = ret.dated[fname] = [];
+            }
+            todos.map((task, n) => {
+                //task.touched = stats.mTimeMs;
+                if (task.done && task.changed) {
+                    ret.done.push(task);
+                }
+                else {
+                    ret.pending.push(task);
+                }
+                if (byDate) {
+                    byDate.push(task);
+                }
+                const tags = findTags(task.item);
+                tags.map(t => {
+                    if (!ret.tagged[t]) {
+                        ret.tagged[t] = [];
                     }
-                } */
+                    ret.tagged[t].push(task);
+                });
+
             });
 
         } else if (dirent.isDirectory() && dirent.name !== genDir) {
             // don't bother with the generated directory
             // otherwise recurse to subdirs
             const dir = path.join(dirLoc, dirent.name);
-            readPath(ret, dir);
+            readPath(ret, dir, fileCache);
         }
     }
 }
 
 const generate = async () => {
     var todos = { "dated": {}, "done": [], "pending": [], "tagged": {} };
+    var fileCache = {};
+    try {
+        const fileCacheData = fs.readFileSync(cacheLoc, 'utf-8');
+        fileCache = JSON.parse(fileCacheData);
+    } catch (e) {
+        console.log('creating new file cache')
+    }
 
-    await readPath(todos, ".");
+    await readPath(todos, ".", fileCache);
+
+    fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
 
     //console.log(JSON.stringify(todos, [], 3));
     return todos;
@@ -131,7 +159,12 @@ const work = async () => {
             for (var i in todosGrp) {
                 const todoItem = todosGrp[i];
                 const isDone = todoItem.done ? 'x' : ' ';
-                output += `- [${isDone}] ${todoItem.item} [[${todoItem.source}]]\n`;
+                const checkbox = cat === "done" ? '' : ` - [${isDone}]`;
+                const itemDate = moment(todoItem.touched);
+                const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD');
+                //                output += `- [${isDone}] ${todoItem.item} [[${todoItem.source}]]\n`;
+                const itemSrc = isDone ? `[{${todoItem.source}}]` : `[[${todoItem.source}]]`;
+                output += `${stamp}${checkbox} ${todoItem.item} ${itemSrc}\n`;
             }
         } else { // objects with keys
             for (var nTitle in todosGrp) {
@@ -141,25 +174,41 @@ const work = async () => {
                     for (var x in list) {
                         const todoItem = list[x];
                         const isDone = todoItem.done ? 'x' : ' ';
-                        output += `- [${isDone}] ${todoItem.item} [[${todoItem.source}]]\n`;
+                        const checkbox = cat === "done" ? '' : ` - [${isDone}]`;
+                        const itemDate = moment(todoItem.touched);
+                        const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD');
+                        const itemSrc = isDone ? `[{${todoItem.source}}]` : `[[${todoItem.source}]]`;
+                        output += `${stamp}${checkbox} ${todoItem.item} ${itemSrc}\n`;
                     }
                 }
             }
 
         }
-        const outPath = path.join(baseLoc, genDir, cat.toUpper()) + ".md";
+        debugger;
+        const outPath = path.join(baseLoc, genDir, cat.toUpperCase()) + ".md";
         //        console.log(`writing to ${outPath}`);
-        fs.writeFileSync(outPath, output, "UTF-8");
+        if (cat === "done") {
+            fs.appendFileSync(outPath, output, "UTF-8");
+        } else {
+            fs.writeFileSync(outPath, output, "UTF-8");
+        }
     }
 };
 
-const ignoreDirs = [genLoc, dotLoc];
+var ignoreDirs = [genLoc, dotLoc];
+if (config.ignoreDirs) {
+    for (const dir in config.ignoreDirs)
+        ignoreDirs.push(path.join(baseLoc, config.ignoreDirs[dir]));
+}
+console.log(`ignoreDirs: ${ignoreDirs}`);
+
 const watchedPath = (fpath) => {
-    var ok1 = true;
-    ignoreDirs.map(dir => { if (fpath.startsWith(dir)) { ok1 = false; } });
-    //:let ok1 = (!fpath.startsWith(genLoc));
-    let ok2 = fpath.endsWith(".md");
-    return ok1 && ok2;
+    for (const id in ignoreDirs) {
+        if (fpath.startsWith(ignoreDirs[id])) {
+            return false;
+        }
+    }
+    return true;
 };
 
 const main = async () => {
@@ -177,14 +226,15 @@ const main = async () => {
                     console.log(`added ${fpath} at ${dateStr}`);
                     work();
                 }
-            }).on('change', fpath => {
+            })
+            .on('change', fpath => {
                 const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
                 if (watchedPath(fpath)) {
-
                     console.log(`changed ${fpath} at ${dateStr}`);
                     work();
                 }
-            }).on('unlink', path => {
+            })
+            .on('unlink', fpath => {
                 const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
                 if (watchedPath(fpath)) {
                     console.log(`deleted ${fpath} at ${dateStr}`);
