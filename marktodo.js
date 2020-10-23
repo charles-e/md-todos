@@ -12,7 +12,6 @@ const { basename } = require("path");
 const GENDIR = "_Generated";
 
 var baseLoc = `${process.env.HOME}/DropBox/Journal`;
-const datefmt = "YYYY-MM-DD";
 
 var when = moment(Date.now()); // when is a moment object
 console.log(when);
@@ -33,7 +32,10 @@ if (prog.dir) {
 baseLoc = path.normalize(baseLoc);
 
 console.log(baseLoc);
-const configDir = `${process.env.HOME}/.config/obsidian-todo`;
+var configDir = process.env("MARKTODO_CONFIGDIR");
+if (!configDir) {
+    configDir = `${process.env.HOME}/.config/obsidian-todo`;
+}
 const configLoc = `${configDir}/config.toml`;
 const cacheLoc = `${configDir}/cache.json`;
 const config = toml.parse(fs.readFileSync(configLoc, 'utf-8'));
@@ -43,6 +45,7 @@ if (config.baseDir) {
         baseLoc = path.join(process.env.HOME, baseLoc);
     }
 }
+const datefmt = config.dateFmt ?? "YYYY-MM-DD";
 genDir = config.genDir ?? GENDIR;
 const genLoc = path.join(baseLoc, genDir);
 const dotLoc = path.join(baseLoc, '.obsidian');
@@ -71,22 +74,24 @@ const readPath = async (ret, dirLoc, fileCache) => {
                 fs.closeSync(fd);
             } catch (e) { }
             var lastTouch;
+            var isNew = true;
             if (stats) {
                 lastTouch = fileCache[fPathRelative] && fileCache[fPathRelative].touch;
+                isNew = false;
             }
             /* Only bother to read the file if its new (not in cache) or
                 if the modify timestamp is newer than cached
             */
-            var todos = [];
-            if (lastTouch && lastTouch < stats.mTimeMs) {
-                todos = fileCache[fPathRelative].todos;
+            var oldTodos = [];
+            var isOld = lastTouch && lastTouch < stats.mTimeMs;
+            if (isOld) {
+                oldTodos = fileCache[fPathRelative].todos;
             } else {
                 const data = fs.readFileSync(fPath, "utf8");
                 todos = findAll(data, path.join(dirLoc, fname));
                 if (todos.length > 0) {
                     todos = todos.map((task, n) => {
                         task.touched = stats.mTimeMs;
-                        task.changed = true;
                         return task;
                     });
                     fileCache[fPathRelative] = {
@@ -95,31 +100,7 @@ const readPath = async (ret, dirLoc, fileCache) => {
                     };
                 }
             }
-            const dated = moment(fname, datefmt);
-            var byDate;
-            if (dated.isValid() && dated.year() > 2000) {
-                byDate = ret.dated[fname] = [];
-            }
-            todos.map((task, n) => {
-                //task.touched = stats.mTimeMs;
-                if (task.done && task.changed) {
-                    ret.done.push(task);
-                }
-                else {
-                    ret.pending.push(task);
-                }
-                if (byDate) {
-                    byDate.push(task);
-                }
-                const tags = findTags(task.item);
-                tags.map(t => {
-                    if (!ret.tagged[t]) {
-                        ret.tagged[t] = [];
-                    }
-                    ret.tagged[t].push(task);
-                });
-
-            });
+            mergeTodos(ret,todos,fname, !isOld);
 
         } else if (dirent.isDirectory() && dirent.name !== genDir) {
             // don't bother with the generated directory
@@ -128,29 +109,57 @@ const readPath = async (ret, dirLoc, fileCache) => {
             readPath(ret, dir, fileCache);
         }
     }
-}
-
-const generate = async () => {
-    var todos = { "dated": {}, "done": [], "pending": [], "tagged": {} };
-    var fileCache = {};
-    try {
-        const fileCacheData = fs.readFileSync(cacheLoc, 'utf-8');
-        fileCache = JSON.parse(fileCacheData);
-    } catch (e) {
-        console.log('creating new file cache')
-    }
-
-    await readPath(todos, ".", fileCache);
-
-    fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
-
-    //console.log(JSON.stringify(todos, [], 3));
-    return todos;
 };
 
-const work = async () => {
-    const todos = await generate();
+const mergeTodos = (taskData, todos, fname, changed) => {
+    const dated = moment(fname, datefmt);
+    var byDate;
+    if (dated.isValid() && dated.year() > 2000) {
+        byDate = ret.dated[fname] = [];
+    }
+    todos.map((task, n) => {
+        //task.touched = stats.mTimeMs;
+        if (task.done && changed) {
+            taskData.done.push(task);
+        }
+        else {
+            taskData.pending.push(task);
+        }
+        if (byDate) {
+            byDate.push(task);
+        }
+        const tags = findTags(task.item);
+        tags.map(t => {
+            if (!taskData.tagged[t]) {
+                taskData.tagged[t] = [];
+            }
+            taskData.tagged[t].push(task);
+        });
 
+    });
+
+};
+
+const generateAll = async (todos, fileCache) => {
+
+    await readPath(todos, ".", fileCache);
+    //console.log(JSON.stringify(todos, [], 3));
+};
+
+const deleteTodosFor = (todos, forPath) => {
+    for (const cat in todos) {
+        const todosGrp = todos[cat];
+        if (todosGrp instanceof Array) {
+            todos[cat] = todosGrp.filter((item) => (item.source !== forPath));
+        } else { // objects with keys
+            for (var nTitle in todosGrp) {
+                todos[cat][nTitle] = todos[cat][nTitle].filter((item) => (item.source !== forPath));
+            }
+        }
+    }
+};
+
+const outputTodos = (todos) => {
     for (const cat in todos) {
 
         var output = '';
@@ -184,7 +193,7 @@ const work = async () => {
             }
 
         }
-        debugger;
+        //debugger;
         const outPath = path.join(baseLoc, genDir, cat.toUpperCase()) + ".md";
         //        console.log(`writing to ${outPath}`);
         if (cat === "done") {
@@ -193,6 +202,12 @@ const work = async () => {
             fs.writeFileSync(outPath, output, "UTF-8");
         }
     }
+}
+
+const scanAll = async (todos, fileCache) => {
+    await generateAll(todos, fileCache);
+    outputTodos(todos);
+    fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
 };
 
 var ignoreDirs = [genLoc, dotLoc];
@@ -213,7 +228,15 @@ const watchedPath = (fpath) => {
 
 const main = async () => {
     console.log(`run against: ${baseLoc}`);
-    await work();
+    var taskData = { "dated": {}, "done": [], "pending": [], "tagged": {} };
+    var fileCache = {};
+    try {
+        const fileCacheData = fs.readFileSync(cacheLoc, 'utf-8');
+        fileCache = JSON.parse(fileCacheData);
+    } catch (e) {
+        console.log('creating new file cache');
+    }
+    await scanAll(taskData, fileCache);
     if (prog.watch) {
         const chokidar = require('chokidar');
 
@@ -224,24 +247,45 @@ const main = async () => {
                 if (watchedPath(fpath)) {
                     const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
                     console.log(`added ${fpath} at ${dateStr}`);
-                    work();
+                    const data = fs.readFileSync(fpath, "utf8");
+                    const todos = findAll(data, fpath);
+                    outputTodos(taskData);
+                    fileCache[fPathRelative] = {
+                        touch: (new Date().getTime()),
+                        todos: todos
+                    };
+                    fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
                 }
             })
             .on('change', fpath => {
                 const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
                 if (watchedPath(fpath)) {
                     console.log(`changed ${fpath} at ${dateStr}`);
-                    work();
+                    const data = fs.readFileSync(fpath, "utf8");
+                    todos = findAll(data, fpath);
+                    outputTodos(todos);
                 }
+                fileCache[fPathRelative] = {
+                    touch: (new Date().getTime()),
+                    todos: todos
+                };
+                fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
             })
             .on('unlink', fpath => {
                 const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
                 if (watchedPath(fpath)) {
                     console.log(`deleted ${fpath} at ${dateStr}`);
-                    work();
+                    deleteTodosFor(todos, fpath);
                 }
+                delete (fileCache[fPathRelative]);
+                fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
             });
     }
 
 };
 main();
+
+exports.main = main;
+exports.mergeTodos = mergeTodos;
+exports.outputTodos = outputTodos;
+exports.findAll = findAll;

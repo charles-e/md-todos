@@ -17,7 +17,7 @@ exports.findTags = (input) => {
         ret.push(match[1]);
     }
     return ret;
-}
+};
 
 exports.findAll = (input,source) => {
 
