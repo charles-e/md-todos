@@ -28,6 +28,8 @@
     "toml": "^3.0.0"
   },
   "devDependencies": {
-    "jest": "^26.6.0"
+    "faucet": "^0.0.1",
+    "jest": "^26.6.0",
+    "tape": "^5.0.1"
   }
 }

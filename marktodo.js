@@ -249,6 +249,7 @@ const main = async () => {
                     console.log(`added ${fpath} at ${dateStr}`);
                     const data = fs.readFileSync(fpath, "utf8");
                     const todos = findAll(data, fpath);
+                    
                     outputTodos(taskData);
                     fileCache[fPathRelative] = {
                         touch: (new Date().getTime()),

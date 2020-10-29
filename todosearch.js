@@ -14,6 +14,7 @@ exports.findTags = (input) => {
 
     for (var i = 0; i < matches.length ; i++){
         const match = matches[i];
+        const tag = match[1].substr(1);
         ret.push(match[1]);
     }
     return ret;
@@ -22,13 +23,11 @@ exports.findTags = (input) => {
 exports.findAll = (input,source) => {
 
     var ret = [];
-    const matchIt = input.matchAll(todoWithTask);
-    const matches = Array.from(matchIt);
-
-    for (var i = 0; i < matches.length ; i++){
-        const match = matches[i];
+    var match;
+    while (match = todoWithTask.exec(input)){
         const done = match[1] == 'x';
-        ret.push({"index": match.index,"done": done, "item":match[2], "source": source});
+        const idx = todoWithTask.lastIndex - match[2].length;
+        ret.push({"index": idx ,"done": done, "item":match[2], "source": source});
     }
     return ret;
 }
