@@ -13,6 +13,14 @@ const {
   basename
 } = require("path");
 
+function toMap(obj){
+  var ret = new Map();
+  for (const k in obj){
+    ret.set(k, obj[k]);
+  }
+  return ret;
+}
+
 function spliceSlice(str, index, count, add) {
   // We cannot pass negative indexes directly to the 2nd slicing operation.
   if (index < 0) {
@@ -77,7 +85,7 @@ class mtd {
   set now(theTime) {
     this.when = theTime;
   }
-
+  
   get pendingList() {
     let td = this.taskData;
     return td && td.pending ? Object.values(td.pending) : [];
@@ -90,78 +98,17 @@ class mtd {
 
   get pendingMap() {
     let td = this.taskData;
-    return (td && td.pending) ? td.pending : new Map();
+    return (td && td.pending) ? toMap(td.pending) : new Map();
   }
 
   get doneMap() {
     let td = this.taskData;
-    return (td && td.done) ? td.done : new Map();
+    return (td && td.done) ? toMap(td.done) : new Map();
   }
 
   get taggedMap() {
     let td = this.taskData;
-    return (td && td.tagged) ? td.tagged : new Map();
-  }
-
-  async readPath(dirLoc, fileCache) {
-
-    let dirInfo;
-    try {
-      const dirPath = path.join(baseLoc, dirLoc);
-      dirInfo = await fs.promises.opendir(dirPath);
-    } catch (err) {
-      console.log(err);
-    }
-    if (dirInfo === undefined) {
-      console.log("undefined");
-    }
-    for await (const dirent of dirInfo) {
-      const fPathRelative = path.join(dirLoc, dirent.name);
-      const fPath = path.join(baseLoc, fPathRelative);
-      const fname = dirent.name.slice(0, -3);
-      if (dirent.isFile() && dirent.name.endsWith(".md") && watchedPath(fPath)) {
-        var stats;
-        try {
-          const fd = fs.openSync(fPath);
-          stats = fs.fstatSync(fd);
-          fs.closeSync(fd);
-        } catch (e) {}
-        var lastTouch;
-        var isNew = true;
-        if (stats) {
-          lastTouch = fileCache[fPathRelative] && fileCache[fPathRelative].touch;
-          isNew = false;
-        }
-        /* Only bother to read the file if its new (not in cache) or
-            if the modify timestamp is newer than cached
-        */
-        var oldTodos = [];
-        var isOld = lastTouch && lastTouch < stats.mTimeMs;
-        if (isOld) {
-          oldTodos = fileCache[fPathRelative].todos;
-        } else {
-          const data = fs.readFileSync(fPath, "utf8");
-          todos = findAll(data, path.join(dirLoc, fname));
-          if (todos.length > 0) {
-            todos = todos.map((task, n) => {
-              task.touched = stats.mTimeMs;
-              return task;
-            });
-            fileCache[fPathRelative] = {
-              touch: stats.mTimeMs,
-              todos: todos
-            };
-          }
-        }
-        mergeTodos(todos, fname, !isOld);
-
-      } else if (dirent.isDirectory() && dirent.name !== genDir) {
-        // don't bother with the generated directory
-        // otherwise recurse to subdirs
-        const dir = path.join(dirLoc, dirent.name);
-        readPath(dir, fileCache);
-      }
-    }
+    return (td && td.tagged) ? new toMap(td.tagged) : new Map();
   }
 
   async idTodos(todos, text, fname) {
@@ -217,10 +164,11 @@ class mtd {
           delete(this.taskData.done[task.id]);
         }
       }
+
       if (byDate) {
         byDate.push(task);
       }
-      task.tags.filter(t => (! (t.startsWith("uid") || t.startsWith("done-")))).map(t => {
+      task.tags.filter(t => (!(t.startsWith("uid") || t.startsWith("done-")))).map(t => {
         if (!this.taskData.tagged[t]) {
           this.taskData.tagged[t] = [];
         }
@@ -242,11 +190,21 @@ class mtd {
   deleteTodosFor(forPath) {
     for (const cat in this.taskData) {
       const todosGrp = this.taskData[cat];
-      if (todosGrp instanceof Array) {
+      if (todosGrp instanceof Array && todosGrp.length !== 0) {
         this.taskData[cat] = todosGrp.filter((item) => (item.source !== forPath));
       } else { // objects with keys
         for (var nTitle in todosGrp) {
-          this.taskData[cat][nTitle] = this.taskData[cat][nTitle].filter((item) => (item.source !== forPath));
+          const item = this.taskData[cat][nTitle];
+          if (item instanceof Array) {
+            this.taskData[cat][nTitle] = item.filter((item) => (item.source === forPath));
+            if(this.taskData[cat][nTitle].length === 0){
+              delete(this.taskData[cat][nTitle]);
+            }
+          } else {
+            if (item.source === forPath) {
+              delete(this.taskData[cat][nTitle]);
+            }
+          }
         }
       }
     }
