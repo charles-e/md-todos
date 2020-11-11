@@ -10,6 +10,7 @@ const path = require("path");
 const { findAll, findTags } = require("./todosearch");
 const { basename } = require("path");
 const GENDIR = "_Generated";
+const mtd = require("./mtd");
 
 var baseLoc = `${process.env.HOME}/DropBox/Journal`;
 
@@ -32,13 +33,19 @@ if (prog.dir) {
 baseLoc = path.normalize(baseLoc);
 
 console.log(baseLoc);
-var configDir = process.env("MARKTODO_CONFIGDIR");
+var configDir = process.env.MARKTODO_CONFIGDIR;
 if (!configDir) {
-    configDir = `${process.env.HOME}/.config/obsidian-todo`;
+    configDir = `${process.env.HOME}/.config/marktask`;
+  if (!fs.existsSync(configDir)){
+    fs.mkdirSync(configDir);
+  }
 }
 const configLoc = `${configDir}/config.toml`;
 const cacheLoc = `${configDir}/cache.json`;
-const config = toml.parse(fs.readFileSync(configLoc, 'utf-8'));
+
+
+console.log(`configLoc ${configLoc}`);
+const config = fs.existsSync(configLoc) ? toml.parse(fs.readFileSync(configLoc, 'utf-8')) : {};
 if (config.baseDir) {
     baseLoc = config.baseDir;
     if (!baseLoc.startsWith("/")) {
@@ -50,6 +57,10 @@ genDir = config.genDir ?? GENDIR;
 const genLoc = path.join(baseLoc, genDir);
 const dotLoc = path.join(baseLoc, '.obsidian');
 
+const taskapi = new mtd({
+   "baseLoc" : baseLoc,
+   "genLoc" : genLoc,
+})
 const readPath = async (ret, dirLoc, fileCache) => {
 
     let dirInfo;
@@ -89,7 +100,10 @@ const readPath = async (ret, dirLoc, fileCache) => {
             } else {
                 const data = fs.readFileSync(fPath, "utf8");
                 todos = findAll(data, path.join(dirLoc, fname));
+
+                console.log(fname);
                 if (todos.length > 0) {
+                    console.log(`count = ${todos.length}`);
                     todos = todos.map((task, n) => {
                         task.touched = stats.mTimeMs;
                         return task;
@@ -100,7 +114,8 @@ const readPath = async (ret, dirLoc, fileCache) => {
                     };
                 }
             }
-            mergeTodos(ret,todos,fname, !isOld);
+            taskapi.markTasks(todos, data)
+            taskapi.mergeTodos(ret,todos,fname);
 
         } else if (dirent.isDirectory() && dirent.name !== genDir) {
             // don't bother with the generated directory
@@ -115,7 +130,7 @@ const mergeTodos = (taskData, todos, fname, changed) => {
     const dated = moment(fname, datefmt);
     var byDate;
     if (dated.isValid() && dated.year() > 2000) {
-        byDate = ret.dated[fname] = [];
+        byDate = taskData.dated[fname] = [];
     }
     todos.map((task, n) => {
         //task.touched = stats.mTimeMs;

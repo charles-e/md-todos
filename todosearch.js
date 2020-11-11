@@ -1,5 +1,6 @@
 
 const todoMarker=/^\s*- \[[ ,x]\]\s+/gm;
+const markMarker=/\((ok|id):(\d+)\)/gm;
 const todoWithTask =/^\s*[-,\*] \[([ ,x])\]\s+(\S.*)$/gm;
 const todoTitle=/# Todo/gm;
 const nextLine = /\n/gm;

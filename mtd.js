@@ -1,17 +1,61 @@
 // a tool to  make todos in my obsidian journal
 //
 //
-
 const moment = require("moment");
 const fs = require("fs");
 const path = require("path");
 const {
-  findAll,
-  findTags
-} = require("./todosearch");
-const {
   basename
 } = require("path");
+
+const todoMarker=/^\s*- \[[ ,x]\]\s+/gm;
+const markMarker=/\((ok|id):(\d+)\)/gm;
+const todoWithTask =/^\s*[-,\*] \[([ ,x])\]\s+(\S.*)$/gm;
+const todoTitle=/# Todo/gm;
+const nextLine = /\n/gm;
+const tagMarker=/#(\S+)/gm;
+
+const tags = /#\S+/;
+
+findMarks = (input) => {
+    var ret = {};
+    const matchIt = input.matchAll(markMarker);
+    const matches = Array.from(matchIt);
+
+    for (var i = 0; i < matches.length ; i++){
+        const match = matches[i];
+        const type = match[1];
+        const val = match[2];
+        ret[type] = val;
+    }
+    return ret;
+}
+
+findTags = (input) => {
+
+    var ret = [];
+    const matchIt = input.matchAll(tagMarker);
+    const matches = Array.from(matchIt);
+
+    for (var i = 0; i < matches.length ; i++){
+        const match = matches[i];
+        const tag = match[1].substr(1);
+        ret.push(match[1]);
+    }
+    return ret;
+};
+
+findAll = (input,source) => {
+
+    var ret = [];
+    var match;
+    while (match = todoWithTask.exec(input)){
+        const done = match[1] == 'x';
+        const idx = todoWithTask.lastIndex - match[2].length;
+        ret.push({"index": idx ,"done": done, "item":match[2], "source": source});
+    }
+    return ret;
+}
 
 function toMap(obj){
   var ret = new Map();
@@ -111,21 +155,31 @@ class mtd {
     return (td && td.tagged) ? new toMap(td.tagged) : new Map();
   }
 
-  async idTodos(todos, text, fname) {
+  async markTasks(todos, text, fname) {
     var newText = text;
     for (const t in todos) {
       const task = todos[t];
-      task.tags = findTags(task.item);
-      const tids = task.tags.filter(tag => {
-        return tag.startsWith('uid');
-      })
-      const tid = tids[0] ? tids[0] : `uid-${this.when.getTime()}/${t}`;
-      task.id = tid;
-      //console.log(`tid = ${tid}`);
-      if (tids.length == 0) {
-        let newItem = `${task.item} #${tid}`;
-        task.item = newItem;
+      var newItem = task.item;
+      const marks = findMarks(task.item);
+      if (marks["id"]){
+        task.id = marks['id'];
+      }
+      else {
+        task.id = ""+this.when.getTime();
+        newItem = `${newItem} (id:${task.id})`;
+      }
+      if (task.done == true) {
+      if (marks["ok"]){
+      }
+      else {
+        let compTime = this.when.getTime();
+        newItem = `${newItem} (ok:${compTime})`;
+        task.doneStamp = compTime;
+      }
+      }
+      if (newItem.length !== task.item.length) {
         newText = spliceSlice(newText, task.index, task.item.length, newItem);
+        task.item = newItem;
       }
     }
     if (newText != text) {
@@ -134,7 +188,7 @@ class mtd {
     return todos;
   }
 
-  async mergeTodos(todos, text, fname) {
+  async mergeTasks(todos, text, fname) {
     var newText = text;
     const dated = moment(fname, this.dateFmt);
     var byDate;
@@ -168,7 +222,7 @@ class mtd {
       if (byDate) {
         byDate.push(task);
       }
-      task.tags.filter(t => (!(t.startsWith("uid") || t.startsWith("done-")))).map(t => {
+      task.tags.map(t => {
         if (!this.taskData.tagged[t]) {
           this.taskData.tagged[t] = [];
         }
@@ -187,7 +241,7 @@ class mtd {
     //console.log(JSON.stringify(todos, [], 3));
   }
 
-  deleteTodosFor(forPath) {
+  deleteTasksFor(forPath) {
     for (const cat in this.taskData) {
       const todosGrp = this.taskData[cat];
       if (todosGrp instanceof Array && todosGrp.length !== 0) {
@@ -210,7 +264,7 @@ class mtd {
     }
   }
 
-  outputTodos() {
+  outputTasks() {
 
     for (const cat in this.taskData) {
 
@@ -258,7 +312,7 @@ class mtd {
 
   async scanAll(fileCache) {
     await this.generateAll(fileCache);
-    this.outputTodos();
+    this.outputTasks();
     fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
   }
 
@@ -271,7 +325,7 @@ class mtd {
     return true;
   }
 
-  findTodos(data, name) {
+  findTasks(data, name) {
     // returns them last to first so string replacement is easier
     return findAll(data, name).sort((a, b) => (b.index - a.index));
   }
