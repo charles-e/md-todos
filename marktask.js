@@ -98,8 +98,9 @@ const readPath = async (ret, dirLoc, fileCache) => {
             if (isOld) {
                 oldTodos = fileCache[fPathRelative].todos;
             } else {
-                const data = fs.readFileSync(fPath, "utf8");
-                todos = findAll(data, path.join(dirLoc, fname));
+                const text = fs.readFileSync(fPath, "utf8");
+                const tasksPath = path.join(dirLoc, fname);
+                todos = taskapi.findTasks(data, tasksPath);
 
                 console.log(fname);
                 if (todos.length > 0) {
@@ -114,8 +115,8 @@ const readPath = async (ret, dirLoc, fileCache) => {
                     };
                 }
             }
-            taskapi.markTasks(todos, data)
-            taskapi.mergeTodos(ret,todos,fname);
+            taskapi.markTasks(todos, text ,tasksPath);
+            taskapi.mergeTodos(,todos,fname);
 
         } else if (dirent.isDirectory() && dirent.name !== genDir) {
             // don't bother with the generated directory

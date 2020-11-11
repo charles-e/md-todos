@@ -29,7 +29,7 @@ findMarks = (input) => {
         ret[type] = val;
     }
     return ret;
-}
+};
 
 findTags = (input) => {
 
@@ -55,15 +55,15 @@ findAll = (input,source) => {
         ret.push({"index": idx ,"done": done, "item":match[2], "source": source});
     }
     return ret;
-}
+};
 
-function toMap(obj){
+toMap = (obj) => {
   var ret = new Map();
   for (const k in obj){
     ret.set(k, obj[k]);
   }
   return ret;
-}
+};
 
 function spliceSlice(str, index, count, add) {
   // We cannot pass negative indexes directly to the 2nd slicing operation.
@@ -104,7 +104,7 @@ class mtd {
       if (params.taskData) {
         this.taskData = params.taskData;
       }
-    };
+    }
   }
 
   set writeHandler(handler) {
@@ -203,15 +203,6 @@ class mtd {
         if (this.taskData.pending[task.id]) {
           delete(this.taskData.pending[task.id]);
         }
-        const dones = task.tags.filter(tag => {
-          return tag.startsWith('done-');
-        });
-        if (dones.length == 0) {
-          let tag = `done-${this.when.getTime()}`;
-          let newItem = `${task.item} #${tag}`;
-          this.taskData.done[task.id].item = newItem;
-          newText = spliceSlice(newText, task.index, task.item.length, newItem);
-        }
       } else {
         this.taskData.pending[task.id] = (task);
         if (this.taskData.done[task.id]) {
@@ -222,12 +213,14 @@ class mtd {
       if (byDate) {
         byDate.push(task);
       }
-      task.tags.map(t => {
+      if (task.tags){ 
+        task.tags.map(t => {
         if (!this.taskData.tagged[t]) {
           this.taskData.tagged[t] = [];
         }
         this.taskData.tagged[t].push(task);
       });
+      }
 
     });
     if (newText !== text) {
