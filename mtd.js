@@ -152,7 +152,7 @@ class mtd {
 
   get taggedMap() {
     let td = this.taskData;
-    return (td && td.tagged) ? new toMap(td.tagged) : new Map();
+    return (td && td.tagged) ? toMap(td.tagged) : new Map();
   }
 
   async markTasks(todos, text, fname) {
@@ -323,6 +323,6 @@ class mtd {
     return findAll(data, name).sort((a, b) => (b.index - a.index));
   }
 
-};
+}
 
 module.exports = mtd;

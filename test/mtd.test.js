@@ -25,7 +25,7 @@ test('read three todos get status', async t => {
   var todoer = new mtd(testParams);
   const todos = todoer.findTasks(text, "test.md");
   await todoer.markTasks(todos, text, "test.md");
-  t.equals(todos[2].id, 1, 'id in first task');
+  t.equals(todos[2].id, "1", 'id in first task');
   t.equals(todos[2].doneStamp, undefined, 'No stamp in first task');
   t.equals(todos[1].id, "321", 'id in second task');
   t.equals(todos[1].doneStamp, undefined, 'no stamp in second task');
@@ -141,7 +141,7 @@ test('update one task to done', async t => {
   - [ ] test 2 (id:234)
   - [x] test3 (id:1)`;
   const todos = todoer.findTasks(text, "test.md");
-  const tagged = await todoer.idTasks(todos, text, "test.md");
+  const tagged = await todoer.markTasks(todos, text, "test.md");
   await todoer.mergeTasks(tagged, text, "test.md");
 
   var data = todoer.data;
@@ -153,7 +153,7 @@ test('update one task to done', async t => {
   t.equals(done.get("123").done, true);
   t.equals(todoer.pendingList.length, 1);
   t.equals(todoer.doneList.length, 2);
-  t.equals(done.get("123").item, "test 1 #123 #done-2");
+  t.equals(done.get("123").item, "test 1 (id:123) (ok:2)");
 });
 
 var mtddata3 = {
