@@ -123,7 +123,7 @@ const readPath = async (dirLoc) => {
         }
         console.log(`count = ${todos.length}`);
         try {
-          taskapi.markTasks(todos, text, fPath);
+          taskapi.clearMarks(todos, text, fPath);
         } catch(err){
           console.log(`error processing ${fPath}`);
         }

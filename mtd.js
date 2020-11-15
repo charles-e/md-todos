@@ -9,7 +9,7 @@ const {
 } = require("path");
 
 const todoMarker = /^\s*- \[[ ,x]\]\s+/gm;
-const markMarker = /\((ok|id):(\d+)\)/gm;
+const markMarker = /\((ok|id):([\d,\.]+)\)/gm;
 const todoWithTask = /^\s*[-,\*] \[([ ,x])\]\s+(\S.*)$/gm;
 const todoTitle = /# Todo/gm;
 const nextLine = /\n/gm;
@@ -27,6 +27,22 @@ findMarks = (input) => {
     const type = match[1];
     const val = match[2];
     ret[type] = val;
+  }
+  return ret;
+};
+
+findAnyMarks = (input, source) => {
+
+  var ret = [];
+  var match;
+  while (match = markMarker.exec(input)) {
+    const idx = markMarker.lastIndex - match[2].length;
+    ret.unshift({
+      "index": match.index,
+      "type" : match[1],
+      "val": match[2],
+      "length" : markMarker.lastIndex - match.index
+    });
   }
   return ret;
 };
@@ -174,7 +190,12 @@ class mtd {
       }
       if (task.done == true) {
         if (marks["ok"]) {} else {
-          let compTime = this.when.getTime();
+          let compTime;
+          try {
+          compTime = this.when.getTime();
+          } catch(e){
+            console.log("Ooops!");
+          }
           newItem = `${newItem} (ok:${compTime})`;
           task.doneStamp = compTime;
         }
@@ -191,12 +212,30 @@ class mtd {
     return todos;
   }
 
-  async mergeTasks(todos, text, fname) {
+  async clearMarks(todos, text, fname) {
     var newText = text;
+    var count = 1;
+    for (const t in todos) {
+      const task = todos[t];
+      var newItem = task.item;
+      const marks = findAnyMarks(task.item);
+      for (const m in marks){
+        let mark = marks[m];
+        let loc = task.index + mark.index;
+        newText = spliceSlice(newText,loc,mark.length,'');
+      }
+    }
+    if (newText != text) {
+      await this.wrtHandler(newText, fname);
+    }
+    return todos;
+  }
+
+  async mergeTasks(todos, fname) {
     const dated = moment(fname, this.dateFmt);
     var byDate;
     if (dated.isValid() && dated.year() > 2000) {
-      byDate = ret.dated[fname] = [];
+      byDate = this.taskData.dated[fname] = [];
     }
 
     todos.map((task, n) => {
@@ -226,9 +265,6 @@ class mtd {
       }
 
     });
-    if (newText !== text) {
-      await this.wrtHandler(newText, fname);
-    }
   }
 
   async generateAll(fileCache) {

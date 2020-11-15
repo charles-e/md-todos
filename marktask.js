@@ -100,7 +100,7 @@ const readPath = async (ret, dirLoc, fileCache) => {
             } else {
                 const text = fs.readFileSync(fPath, "utf8");
                 const tasksPath = path.join(dirLoc, fname);
-                todos = taskapi.findTasks(data, tasksPath);
+                todos = taskapi.findTasks(text, tasksPath);
 
                 console.log(fname);
                 if (todos.length > 0) {
@@ -114,46 +114,17 @@ const readPath = async (ret, dirLoc, fileCache) => {
                         todos: todos
                     };
                 }
+              taskapi.markTasks(todos, text, tasksPath);
             }
-            taskapi.markTasks(todos, text ,tasksPath);
-            taskapi.mergeTodos(,todos,fname);
+            taskapi.mergeTasks(todos, fname);
 
         } else if (dirent.isDirectory() && dirent.name !== genDir) {
             // don't bother with the generated directory
             // otherwise recurse to subdirs
             const dir = path.join(dirLoc, dirent.name);
-            readPath(ret, dir, fileCache);
+            await readPath(ret, dir, fileCache);
         }
     }
-};
-
-const mergeTodos = (taskData, todos, fname, changed) => {
-    const dated = moment(fname, datefmt);
-    var byDate;
-    if (dated.isValid() && dated.year() > 2000) {
-        byDate = taskData.dated[fname] = [];
-    }
-    todos.map((task, n) => {
-        //task.touched = stats.mTimeMs;
-        if (task.done && changed) {
-            taskData.done.push(task);
-        }
-        else {
-            taskData.pending.push(task);
-        }
-        if (byDate) {
-            byDate.push(task);
-        }
-        const tags = findTags(task.item);
-        tags.map(t => {
-            if (!taskData.tagged[t]) {
-                taskData.tagged[t] = [];
-            }
-            taskData.tagged[t].push(task);
-        });
-
-    });
-
 };
 
 const generateAll = async (todos, fileCache) => {
@@ -301,8 +272,3 @@ const main = async () => {
 
 };
 main();
-
-exports.main = main;
-exports.mergeTodos = mergeTodos;
-exports.outputTodos = outputTodos;
-exports.findAll = findAll;
