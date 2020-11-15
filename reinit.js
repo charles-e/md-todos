@@ -117,7 +117,7 @@ const readPath = async (dirLoc) => {
         const dated = moment(fname, datefmt);
         var byDate;
         if (dated.isValid() && dated.year() > 2000) {
-          taskapi.now = new Date(dated.unix());
+          taskapi.now = new Date(dated.unix() * 1000);
         } else {
           taskapi.now = new Date( stats.ctime.getTime() );
         }
