@@ -8,58 +8,63 @@ const {
   basename
 } = require("path");
 
-const todoMarker=/^\s*- \[[ ,x]\]\s+/gm;
-const markMarker=/\((ok|id):(\d+)\)/gm;
-const todoWithTask =/^\s*[-,\*] \[([ ,x])\]\s+(\S.*)$/gm;
-const todoTitle=/# Todo/gm;
+const todoMarker = /^\s*- \[[ ,x]\]\s+/gm;
+const markMarker = /\((ok|id):(\d+)\)/gm;
+const todoWithTask = /^\s*[-,\*] \[([ ,x])\]\s+(\S.*)$/gm;
+const todoTitle = /# Todo/gm;
 const nextLine = /\n/gm;
-const tagMarker=/#(\S+)/gm;
+const tagMarker = /#(\S+)/gm;
 
 const tags = /#\S+/;
 
 findMarks = (input) => {
-    var ret = {};
-    const matchIt = input.matchAll(markMarker);
-    const matches = Array.from(matchIt);
+  var ret = {};
+  const matchIt = input.matchAll(markMarker);
+  const matches = Array.from(matchIt);
 
-    for (var i = 0; i < matches.length ; i++){
-        const match = matches[i];
-        const type = match[1];
-        const val = match[2];
-        ret[type] = val;
-    }
-    return ret;
+  for (var i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const type = match[1];
+    const val = match[2];
+    ret[type] = val;
+  }
+  return ret;
 };
 
 findTags = (input) => {
 
-    var ret = [];
-    const matchIt = input.matchAll(tagMarker);
-    const matches = Array.from(matchIt);
+  var ret = [];
+  const matchIt = input.matchAll(tagMarker);
+  const matches = Array.from(matchIt);
 
-    for (var i = 0; i < matches.length ; i++){
-        const match = matches[i];
-        const tag = match[1].substr(1);
-        ret.push(match[1]);
-    }
-    return ret;
+  for (var i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const tag = match[1].substr(1);
+    ret.push(match[1]);
+  }
+  return ret;
 };
 
-findAll = (input,source) => {
+findAll = (input, source) => {
 
-    var ret = [];
-    var match;
-    while (match = todoWithTask.exec(input)){
-        const done = match[1] == 'x';
-        const idx = todoWithTask.lastIndex - match[2].length;
-        ret.push({"index": idx ,"done": done, "item":match[2], "source": source});
-    }
-    return ret;
+  var ret = [];
+  var match;
+  while (match = todoWithTask.exec(input)) {
+    const done = match[1] == 'x';
+    const idx = todoWithTask.lastIndex - match[2].length;
+    ret.push({
+      "index": idx,
+      "done": done,
+      "item": match[2],
+      "source": source
+    });
+  }
+  return ret;
 };
 
 toMap = (obj) => {
   var ret = new Map();
-  for (const k in obj){
+  for (const k in obj) {
     ret.set(k, obj[k]);
   }
   return ret;
@@ -118,7 +123,6 @@ class mtd {
   set data(data) {
     this.taskData = data;
   }
-
   get data() {
     return this.taskData;
   }
@@ -129,7 +133,7 @@ class mtd {
   set now(theTime) {
     this.when = theTime;
   }
-  
+
   get pendingList() {
     let td = this.taskData;
     return td && td.pending ? Object.values(td.pending) : [];
@@ -157,30 +161,29 @@ class mtd {
 
   async markTasks(todos, text, fname) {
     var newText = text;
+    var count = 1;
     for (const t in todos) {
       const task = todos[t];
       var newItem = task.item;
       const marks = findMarks(task.item);
-      if (marks["id"]){
+      if (marks["id"]) {
         task.id = marks['id'];
-      }
-      else {
-        task.id = ""+this.when.getTime();
+      } else {
+        task.id = `${moment(this.when).format("YYYYMMDD")}.${count}`;
         newItem = `${newItem} (id:${task.id})`;
       }
       if (task.done == true) {
-      if (marks["ok"]){
-      }
-      else {
-        let compTime = this.when.getTime();
-        newItem = `${newItem} (ok:${compTime})`;
-        task.doneStamp = compTime;
-      }
+        if (marks["ok"]) {} else {
+          let compTime = this.when.getTime();
+          newItem = `${newItem} (ok:${compTime})`;
+          task.doneStamp = compTime;
+        }
       }
       if (newItem.length !== task.item.length) {
         newText = spliceSlice(newText, task.index, task.item.length, newItem);
         task.item = newItem;
       }
+      count++;
     }
     if (newText != text) {
       await this.wrtHandler(newText, fname);
@@ -213,13 +216,13 @@ class mtd {
       if (byDate) {
         byDate.push(task);
       }
-      if (task.tags){ 
+      if (task.tags) {
         task.tags.map(t => {
-        if (!this.taskData.tagged[t]) {
-          this.taskData.tagged[t] = [];
-        }
-        this.taskData.tagged[t].push(task);
-      });
+          if (!this.taskData.tagged[t]) {
+            this.taskData.tagged[t] = [];
+          }
+          this.taskData.tagged[t].push(task);
+        });
       }
 
     });
@@ -244,7 +247,7 @@ class mtd {
           const item = this.taskData[cat][nTitle];
           if (item instanceof Array) {
             this.taskData[cat][nTitle] = item.filter((item) => (item.source === forPath));
-            if(this.taskData[cat][nTitle].length === 0){
+            if (this.taskData[cat][nTitle].length === 0) {
               delete(this.taskData[cat][nTitle]);
             }
           } else {
