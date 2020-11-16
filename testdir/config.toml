@@ -1,3 +1,0 @@
-baseDir = "testdir/Journal"
-ignoreDirs = [ "SAVE" ]
-genDir = "_Generated"
