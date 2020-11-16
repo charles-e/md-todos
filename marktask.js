@@ -235,6 +235,24 @@ const watchedPath = (fpath) => {
   }
   return true;
 };
+var bounceMap;
+
+const debounce = (path, func, wait) => {
+
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(bounceMap[path]);
+      delete(bounceMap[path]);
+      func(...args);
+    };
+
+    if (bounceMap[path]){
+      clearTimeout(bounceMap[path]);
+      delete(bounceMap[path]);
+    } 
+    bounceMap[path] = setTimeout(later, wait);
+  };
+};
 
 const main = async () => {
   console.log(`run against: ${baseLoc}`);
