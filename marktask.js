@@ -9,15 +9,10 @@ const toml = require("toml");
 const moment = require("moment");
 const fs = require("fs");
 const path = require("path");
-const {
-  findAll,
-  findTags
-} = require("./todosearch");
-const {
-  basename
-} = require("path");
+const { basename } = require("path");
 const GENDIR = "_Generated";
 const mtd = require("./mtd");
+const ansiEscapes = require("ansi-escapes");
 
 var baseLoc = `${process.env.HOME}/DropBox/Journal`;
 
@@ -33,13 +28,13 @@ prog.option('-d, --debug', 'output extra debugging')
 
 prog.parse(process.argv);
 if (prog.dir) {
-  console.log('-Dir ' + prog.dir);
+  if (prog.debug) console.log('-Dir ' + prog.dir);
   baseLoc = prog.dir;
 }
 
 baseLoc = path.normalize(baseLoc);
 
-console.log(baseLoc);
+if (prog.debug) console.log(baseLoc);
 var configDir = process.env.MARKTODO_CONFIGDIR;
 if (!configDir) {
   configDir = `${process.env.HOME}/.config/marktask`;
@@ -51,7 +46,7 @@ const configLoc = `${configDir}/config.toml`;
 const cacheLoc = `${configDir}/cache.json`;
 
 
-console.log(`configLoc ${configLoc}`);
+if (prog.debug) console.log(`configLoc ${configLoc}`);
 const config = fs.existsSync(configLoc) ? toml.parse(fs.readFileSync(configLoc, 'utf-8')) : {};
 if (config.baseDir) {
   baseLoc = config.baseDir;
@@ -72,8 +67,8 @@ const taskapi = new mtd({
 var ignoreCache = {};
 taskapi.writeHandler = async (text, fpath) => {
   try {
-    console.log(text);
-    console.log(`writing to ${fpath}`);
+    if (prog.debug) console.log(text);
+    if (prog.debug) console.log(`writing to ${fpath}`);
     await fs.promises.writeFile(fpath, text);
 
   } catch (e) {
@@ -91,9 +86,6 @@ const readPath = async (dirLoc, fileCache) => {
   } catch (err) {
     console.log(`error opening directory ${ err } `);
     throw (err);
-  }
-  if (dirInfo === undefined) {
-    console.log("undefined");
   }
   for await (const dirent of dirInfo) {
     const fPathRelative = path.join(dirLoc, dirent.name);
@@ -124,7 +116,7 @@ const readPath = async (dirLoc, fileCache) => {
       } else {
         let text;
         try {
-          console.log(`reading file ${fPath}`);
+          if (prog.debug) console.log(`reading file ${fPath}`);
           text = fs.readFileSync(fPath, "utf8");
         } catch (err) {
           console.log(`${err} reading file ${fPath}`);
@@ -153,7 +145,7 @@ const readPath = async (dirLoc, fileCache) => {
       // otherwise recurse to subdirs
       const dir = path.join(dirLoc, dirent.name);
       let resolved = path.join(baseLoc, dir);
-      console.log(`cd to ${resolved}`);
+      if (prog.debug) console.log(`cd to ${resolved}`);
       if (watchedPath(resolved)) {
         await readPath(dir, fileCache);
       }
@@ -233,13 +225,13 @@ if (config.ignoreDirs) {
   for (const dir in config.ignoreDirs)
     ignoreDirs.push(path.join(baseLoc, config.ignoreDirs[dir]));
 }
-console.log(`ignoreDirs: ${ignoreDirs}`);
+if (prog.debug) console.log(`ignoreDirs: ${ignoreDirs}`);
 
 
 const watchedPath = (fpath) => {
   for (const id in ignoreDirs) {
     if (fpath.startsWith(ignoreDirs[id])) {
-      console.log(`ignoring ${fpath}`);
+      if (prog.debug) console.log(`ignoring ${fpath}`);
       return false;
     }
   }
@@ -275,7 +267,7 @@ const debounce = (wait) => {
 
 const handleMod = async (fpath) => {
   const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
-  console.log(`changed ${fpath} at ${dateStr}`);
+  if (prog.debug) console.log(`changed ${fpath} at ${dateStr}`);
   let text;
   try {
     text = fs.readFileSync(fpath, "utf8");
@@ -283,10 +275,10 @@ const handleMod = async (fpath) => {
     console.log(`${err} reading file ${fpath}`);
     throw (err);
   }
-  todos = findAll(text, fpath);
+  todos = taskapi.findTasks(text, fpath);
   await taskapi.markTasks(todos, text, fpath);
   taskapi.mergeTasks(todos, fpath);
-  outputTodos(todos);
+  outputTodos();
   fileCache[fpath] = {
     "touch": Date.now(),
     "todos": todos
@@ -295,6 +287,7 @@ const handleMod = async (fpath) => {
 };
 
 var fileCache = {};
+var n = 0;
 const main = async () => {
   console.log(`run against: ${baseLoc}`);
   try {
@@ -306,8 +299,8 @@ const main = async () => {
   await scanAll(fileCache);
   taskapi.writeHandler = async (text, fpath) => {
     try {
-      console.log(text);
-      console.log(`writing to ${fpath}`);
+      if (prog.debug && n > 0) process.stdout.write(ansiEscapes.eraseLines(1));
+      console.log(`writing to ${fpath}`); n++;
       await fs.promises.writeFile(fpath, text);
 
     } catch (e) {
@@ -331,11 +324,13 @@ const main = async () => {
           console.log()
           if (watchedPath(fpath)) {
             if (ignoreCache[fpath]) {
-              console.log(`ignored ${fpath}`)
+              if (prog.debug) console.log(`ignored ${fpath}`)
               delete(ignoreCache[fpath]);
             } else {
               const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
+              if (!prog.debug) process.stdout.write(ansiEscapes.eraseLines(1));
               console.log(`added ${fpath} at ${dateStr}`);
+              
               let text;
               try {
                 text = fs.readFileSync(fpath, "utf8");
@@ -343,11 +338,11 @@ const main = async () => {
                 console.log(`${err} reading file ${fpath}`);
                 throw (err);
               }
-              const todos = taskapi.findAll(text, fpath);
+              const todos = taskapi.findTasks(text, fpath);
               await taskapi.markTasks(todos, text, fpath);
               taskapi.mergeTasks(todos, fpath);
 
-              outputTodos(taskData);
+              outputTodos();
               fileCache[fpath] = {
                 "touch": Date.now(),
                 "todos": todos
@@ -359,19 +354,18 @@ const main = async () => {
         .on('change', async fpath => {
           if (watchedPath(fpath)) {
             if (ignoreCache[fpath]) {
-              console.log(`ignored ${fpath}`)
+              if (prog.debug) console.log(`ignored ${fpath}`)
               delete(ignoreCache[fpath]);
             } else {
-              console.log("debouncing");
-              debounce(1000)(fpath);
+              if (prog.debug) console.log("debouncing");
+              debounce(60000)(fpath);
             }
           }
         })
         .on('unlink', async fpath => {
-          console.log('unlink....')
           const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
           if (watchedPath(fpath)) {
-            console.log(`deleted ${fpath} at ${dateStr}`);
+            if (prog.debug) console.log(`deleted ${fpath} at ${dateStr}`);
             await taskapi.deleteTodosFor(todos, fpath);
           }
           delete(fileCache[fpath]);
