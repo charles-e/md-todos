@@ -39,9 +39,9 @@ findAnyMarks = (input, source) => {
     const idx = markMarker.lastIndex - match[2].length;
     ret.unshift({
       "index": match.index,
-      "type" : match[1],
+      "type": match[1],
       "val": match[2],
-      "length" : markMarker.lastIndex - match.index
+      "length": markMarker.lastIndex - match.index
     });
   }
   return ret;
@@ -103,6 +103,7 @@ class mtd {
     const wrtHandler = async (buf, name) => {};
     this.wrtHandler = (params && params.wrtHandler) ? params.wrtHandler : wrtHandler;
     this.taskData = {
+      "sources": {},
       "dated": {},
       "done": {},
       "pending": {},
@@ -192,8 +193,8 @@ class mtd {
         if (marks["ok"]) {} else {
           let compTime;
           try {
-          compTime = this.when.getTime();
-          } catch(e){
+            compTime = this.when.getTime();
+          } catch (e) {
             console.log("Ooops!");
           }
           newItem = `${newItem} (ok:${compTime})`;
@@ -219,10 +220,10 @@ class mtd {
       const task = todos[t];
       var newItem = task.item;
       const marks = findAnyMarks(task.item);
-      for (const m in marks){
+      for (const m in marks) {
         let mark = marks[m];
         let loc = task.index + mark.index;
-        newText = spliceSlice(newText,loc,mark.length,'');
+        newText = spliceSlice(newText, loc, mark.length, '');
       }
     }
     if (newText != text) {
@@ -232,23 +233,30 @@ class mtd {
   }
 
   async mergeTasks(todos, fname) {
+    let data = this.taskData;
     const dated = moment(fname, this.dateFmt);
     var byDate;
     if (dated.isValid() && dated.year() > 2000) {
-      byDate = this.taskData.dated[fname] = [];
+      byDate = data.dated[fname] = [];
     }
-
+    let tempSrc = {};
+    if (!data.sources) {
+      data.sources = {};
+    }
+    let bySrc = data.sources[fname];
     todos.map((task, n) => {
       //task.touched = stats.mTimeMs;
+      tempSrc[task.id] = task.done;
       if (task.done) {
-        this.taskData.done[task.id] = (task);
-        if (this.taskData.pending[task.id]) {
-          delete(this.taskData.pending[task.id]);
+        data.done[task.id] = (task);
+
+        if (data.pending[task.id]) {
+          delete(data.pending[task.id]);
         }
       } else {
-        this.taskData.pending[task.id] = (task);
-        if (this.taskData.done[task.id]) {
-          delete(this.taskData.done[task.id]);
+        data.pending[task.id] = (task);
+        if (data.done[task.id]) {
+          delete(data.done[task.id]);
         }
       }
 
@@ -265,12 +273,36 @@ class mtd {
       }
 
     });
+    // look for deletions
+    let origSrc = data.sources[fname];
+    if (origSrc) {
+      for (const o in origSrc) {
+        if (tempSrc[o] === undefined) {
+          if (origSrc[o]) {
+            this.deleteFromTagged(data.done[o]);
+            delete(data.done[o]);
+          } else {
+            this.deleteFromTagged(data.pending[o]);
+            delete(data.pending[o]);
+          }
+        }
+      }
+    }
+    data.sources[fname] = tempSrc;
   }
 
-  async generateAll(fileCache) {
-
-    await this.readPath(".", fileCache);
-    //console.log(JSON.stringify(todos, [], 3));
+  deleteFromTagged(task) {
+    if (task.tags) {
+      task.tags.map(t => {
+        let taggedT = this.taskData.tagged[t];
+        if (taggedT) {
+          this.taskData.tagged[t] = taggedT.filter(td => (t.id === task.id));
+          if (this.taskData.tagged[t].length === 0) { 
+            delete(this.taskData.tagged[t]);
+          }
+        }
+      });
+    }
   }
 
   deleteTasksFor(forPath) {
@@ -294,67 +326,6 @@ class mtd {
         }
       }
     }
-  }
-
-  outputTasks() {
-
-    for (const cat in this.taskData) {
-
-      var output = '';
-      const todosGrp = this.taskData[cat];
-      if (todosGrp instanceof Array) {
-        for (var i in todosGrp) {
-          const todoItem = todosGrp[i];
-          const isDone = todoItem.done ? 'x' : ' ';
-          const checkbox = cat === "done" ? '' : ` - [${isDone}]`;
-          const itemDate = moment(todoItem.touched);
-          const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD');
-          //                output += `- [${isDone}] ${todoItem.item} [[${todoItem.source}]]\n`;
-          const itemSrc = isDone ? `[{${todoItem.source}}]` : `[[${todoItem.source}]]`;
-          output += `${stamp}${checkbox} ${todoItem.item} ${itemSrc}\n`;
-        }
-      } else { // objects with keys
-        for (var nTitle in todosGrp) {
-          const list = todosGrp[nTitle].filter(i => (i.done === false));
-          if (list.length > 0) {
-            output += `# +${nTitle}\n`;
-            for (var x in list) {
-              const todoItem = list[x];
-              const isDone = todoItem.done ? 'x' : ' ';
-              const checkbox = cat === "done" ? '' : ` - [${isDone}]`;
-              const itemDate = moment(todoItem.touched);
-              const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD');
-              const itemSrc = isDone ? `[{${todoItem.source}}]` : `[[${todoItem.source}]]`;
-              output += `${stamp}${checkbox} ${todoItem.item} ${itemSrc}\n`;
-            }
-          }
-        }
-
-      }
-      //debugger;
-      const outPath = path.join(baseLoc, genDir, cat.toUpperCase()) + ".md";
-      //        console.log(`writing to ${outPath}`);
-      if (cat === "done") {
-        fs.appendFileSync(outPath, output, "UTF-8");
-      } else {
-        fs.writeFileSync(outPath, output, "UTF-8");
-      }
-    }
-  }
-
-  async scanAll(fileCache) {
-    await this.generateAll(fileCache);
-    this.outputTasks();
-    fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
-  }
-
-  watchedPath(fpath) {
-    for (const id in this.ignoreDirs) {
-      if (fpath.startsWith(this.ignoreDirs[id])) {
-        return false;
-      }
-    }
-    return true;
   }
 
   findTasks(data, name) {

@@ -17,6 +17,7 @@
   "author": "Charles Eubanks",
   "license": "ISC",
   "dependencies": {
+    "active-win": "^6.2.0",
     "ansi-escapes": "^4.3.1",
     "chalk": "^4.1.0",
     "chokidar": "^3.4.2",

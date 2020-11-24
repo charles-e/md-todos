@@ -299,8 +299,13 @@ const main = async () => {
   await scanAll(fileCache);
   taskapi.writeHandler = async (text, fpath) => {
     try {
-      if (prog.debug && n > 0) process.stdout.write(ansiEscapes.eraseLines(1));
+      if  (! prog.debug ){
+        process.stdout.write(ansiEscapes.eraseLines(1)+`writing to ${fpath}`);
+      }
+      else{
       console.log(`writing to ${fpath}`); n++;
+      }
+        
       await fs.promises.writeFile(fpath, text);
 
     } catch (e) {
@@ -366,7 +371,7 @@ const main = async () => {
           const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
           if (watchedPath(fpath)) {
             if (prog.debug) console.log(`deleted ${fpath} at ${dateStr}`);
-            await taskapi.deleteTodosFor(todos, fpath);
+            await taskapi.deleteTasksFor(todos, fpath);
           }
           delete(fileCache[fpath]);
           fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
