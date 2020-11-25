@@ -1,5 +1,5 @@
 #!/bin/sh
 
-SCRIPT="${HOME}/Dev/marktask/marktask.js"
+SCRIPT="${HOME}/Dev/md-todos/marktask.js"
 
 node "$SCRIPT" $*

@@ -9,10 +9,13 @@ const toml = require("toml");
 const moment = require("moment");
 const fs = require("fs");
 const path = require("path");
-const { basename } = require("path");
+const {
+  basename
+} = require("path");
 const GENDIR = "_Generated";
 const mtd = require("./mtd");
 const ansiEscapes = require("ansi-escapes");
+const activeWin = require("active-win");
 
 var baseLoc = `${process.env.HOME}/DropBox/Journal`;
 
@@ -244,26 +247,6 @@ const watchedPath = (fpath) => {
 
 var bounceList = [];
 
-const debounce = (wait) => {
-  let timeout;
-
-  return function executedFunction(path) {
-    const later = async () => {
-      clearTimeout(timeout);
-      while (bounceList.length > 0) {
-        const path = bounceList.pop()
-        await handleMod(path);
-      }
-    };
-
-    clearTimeout(timeout);
-    if (bounceList.indexOf(path) < 0) {
-      bounceList.push(path);
-    }
-    timeout = setTimeout(later, wait);
-  };
-};
-
 
 const handleMod = async (fpath) => {
   const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
@@ -273,7 +256,7 @@ const handleMod = async (fpath) => {
     text = fs.readFileSync(fpath, "utf8");
   } catch (err) {
     console.log(`${err} reading file ${fpath}`);
-    throw (err);
+    return;
   }
   todos = taskapi.findTasks(text, fpath);
   await taskapi.markTasks(todos, text, fpath);
@@ -284,6 +267,18 @@ const handleMod = async (fpath) => {
     "todos": todos
   };
   fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
+};
+
+const bgQ = [];
+const backgroundTask = async () => {
+  let win = await activeWin();
+  if (win && win.title && ( !win.title.toLowerCase().startsWith('obsidian')) ) {
+    while (bgQ.length > 0) {
+      let path = bgQ.pop();
+      await handleMod(path);
+    }
+  }
+  setTimeout(backgroundTask, 60000);
 };
 
 var fileCache = {};
@@ -299,13 +294,13 @@ const main = async () => {
   await scanAll(fileCache);
   taskapi.writeHandler = async (text, fpath) => {
     try {
-      if  (! prog.debug ){
-        process.stdout.write(ansiEscapes.eraseLines(1)+`writing to ${fpath}`);
+      if (!prog.debug) {
+        process.stdout.write(ansiEscapes.eraseLines(1) + `writing to ${fpath}`);
+      } else {
+        console.log(`writing to ${fpath}`);
+        n++;
       }
-      else{
-      console.log(`writing to ${fpath}`); n++;
-      }
-        
+
       await fs.promises.writeFile(fpath, text);
 
     } catch (e) {
@@ -321,6 +316,7 @@ const main = async () => {
     // One-liner for current directory
     //
     try {
+      await backgroundTask();
       await chokidar.watch(baseLoc, {
           "ignoreInitial": true,
           "usePolling": true
@@ -335,7 +331,7 @@ const main = async () => {
               const dateStr = moment().format('YYYY-MM-DD @ HH:mm:ss');
               if (!prog.debug) process.stdout.write(ansiEscapes.eraseLines(1));
               console.log(`added ${fpath} at ${dateStr}`);
-              
+
               let text;
               try {
                 text = fs.readFileSync(fpath, "utf8");
@@ -362,8 +358,7 @@ const main = async () => {
               if (prog.debug) console.log(`ignored ${fpath}`)
               delete(ignoreCache[fpath]);
             } else {
-              if (prog.debug) console.log("debouncing");
-              debounce(60000)(fpath);
+              bgQ.push(fpath);
             }
           }
         })
