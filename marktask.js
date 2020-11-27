@@ -192,22 +192,42 @@ const outputTodos = () => {
           }
         }
       }
-
+    } else if (cat === 'pending') {
+      const allSrc = []
+      const allTask = [];
+      Object.values(todos[cat]).map(task => {
+        idx = allSrc.indexOf(task.source);
+        if (idx < 0) {
+          allSrc.push(task.source);
+          allTask.push([task]);
+        } else {
+          allTask[idx].push(task);
+        }
+      })
+      for (var x; x < allSrc.length; x++) {
+        let source = allSrc[x];
+        let list = allTask[x];
+        let src = source.substring(baseLoc.length + 1, source.length - 3);
+        output += `## [[${src}#Tasks|${src}]]\n`;
+        for (const y in list) {
+          const task = list[y];
+          const itemDate = moment(task.touched);
+          const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD ');
+          output += `- ${stamp}${task.item}\n`;
+        }
+      }
     } else {
       for (var i in todosGrp) {
         const todoItem = todosGrp[i];
-        const isDone = todoItem.done ? 'x' : ' ';
-        const checkbox = cat === "done" ? '' : ` - [${isDone}]`;
         const itemDate = moment(todoItem.touched);
-        const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD');
-        //                output += `- [${isDone}] ${todoItem.item} [[${todoItem.source}]]\n`;
-        const itemSrc = isDone ? `[{${todoItem.source}}]` : `[[${todoItem.source}]]`;
-        output += `${stamp}${checkbox} ${todoItem.item} ${itemSrc}\n`;
+        const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD ');
+        let link = todoItem.source ? "[[" + todoItem.source.substring(baseLoc.length + 1, todoItem.source.length - 3) + "]]" : "";
+        output += `- ${stamp}${todoItem.item} ${link}\n`;
       }
     }
 
     //debugger;
-    const outPath = path.join(baseLoc, genDir, cat.toUpperCase()) + ".md";
+    const outPath = path.join(baseLoc, genDir, capitalize(cat)) + ".md";
     //        console.log(`writing to ${outPath}`);
     if (cat === "done") {
       fs.appendFileSync(outPath, output, "UTF-8");
@@ -216,6 +236,10 @@ const outputTodos = () => {
     }
   }
 }
+const capitalize = (s) => {
+  if (typeof s !== 'string') return ''
+  return s.charAt(0).toUpperCase() + s.slice(1)
+};
 
 const scanAll = async (fileCache) => {
   await readPath(".", fileCache);
@@ -272,7 +296,7 @@ const handleMod = async (fpath) => {
 const bgQ = [];
 const backgroundTask = async () => {
   let win = await activeWin();
-  if (win && win.title && ( !win.title.toLowerCase().startsWith('obsidian')) ) {
+  if (win && win.title && (!win.title.toLowerCase().startsWith('obsidian'))) {
     while (bgQ.length > 0) {
       let path = bgQ.pop();
       await handleMod(path);
