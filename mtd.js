@@ -123,7 +123,7 @@ class mtd {
     this.taskData = {
       "sources": {},
       "dated": {},
-      "done": {},
+      "complete": {},
       "pending": {},
       "tagged": {},
     };
@@ -176,7 +176,7 @@ class mtd {
 
   get doneList() {
     let td = this.taskData;
-    return td && td.done ? Object.values(td.done) : [];
+    return td && td.complete ? Object.values(td.complete) : [];
   }
 
   get pendingMap() {
@@ -186,7 +186,7 @@ class mtd {
 
   get doneMap() {
     let td = this.taskData;
-    return (td && td.done) ? toMap(td.done) : new Map();
+    return (td && td.complete) ? toMap(td.complete) : new Map();
   }
 
   get taggedMap() {
@@ -218,7 +218,10 @@ class mtd {
         newItem = `${newItem} (id:${task.id})`;
       }
       if (task.done == true) {
-        if (marks["ok"]) {} else {
+        if (marks["ok"]) {
+           let compTime = parseInt(marks.ok)
+          task.doneStamp = compTime;
+        } else {
           let compTime;
           try {
             compTime = this.when.getTime();
@@ -276,15 +279,15 @@ class mtd {
       //task.touched = stats.mTimeMs;
       tempSrc[task.id] = task.done;
       if (task.done) {
-        data.done[task.id] = (task);
+        data.complete[task.id] = (task);
 
         if (data.pending[task.id]) {
           delete(data.pending[task.id]);
         }
       } else {
         data.pending[task.id] = (task);
-        if (data.done[task.id]) {
-          delete(data.done[task.id]);
+        if (data.complete[task.id]) {
+          delete(data.complete[task.id]);
         }
       }
 
@@ -307,8 +310,8 @@ class mtd {
       for (const o in origSrc) {
         if (tempSrc[o] === undefined) {
           if (origSrc[o]) {
-            this.deleteFromTagged(data.done[o]);
-            delete(data.done[o]);
+            this.deleteFromTagged(data.complete[o]);
+            delete(data.complete[o]);
           } else {
             this.deleteFromTagged(data.pending[o]);
             delete(data.pending[o]);

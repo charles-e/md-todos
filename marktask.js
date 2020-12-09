@@ -140,7 +140,7 @@ const readPath = async (dirLoc, fileCache) => {
             "todos": todos
           };
         }
-        taskapi.markTasks(todos, text, fPath);
+        todos = await taskapi.markTasks(todos, text, fPath);
       }
       taskapi.mergeTasks(todos, relPath);
 
@@ -172,11 +172,11 @@ const deleteTodosFor = (todos, forPath) => {
 
 const outputTasks = () => {
   
-  let todos = taskapi.taskData;
-  for (const cat in todos) {
+  let tasks = taskapi.taskData;
+  for (const cat in tasks) {
 
     var output = '';
-    const todosGrp = todos[cat];
+    const todosGrp = tasks[cat];
 
     if (cat === 'dated' || cat === 'tagged') { // objects with keys
       for (var nTitle in todosGrp) {
@@ -186,18 +186,19 @@ const outputTasks = () => {
           for (var x in list) {
             const todoItem = list[x];
             const isDone = todoItem.done ? 'x' : ' ';
-            const checkbox = cat === "done" ? '' : ` - [${isDone}]`;
+            const checkbox = cat === "complete" ? '' : ` - [${isDone}]`;
             const itemDate = moment(todoItem.touched);
-            const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD');
+            const stamp = cat !== "complete" ? "" : itemDate.format('YYYY-MM-DD');
             const itemSrc = isDone ? `[{${todoItem.source}}]` : `[[${todoItem.source}]]`;
             output += `${stamp}${checkbox} ${todoItem.item} ${itemSrc}\n`;
           }
         }
       }
     } else if (cat === 'pending') {
+      // Group the tasks by the source note
       const allSrc = []
       const allTask = [];
-      Object.values(todos[cat]).map(task => {
+      Object.values(tasks[cat]).map(task => {
         idx = allSrc.indexOf(task.source);
         if (idx < 0) {
           allSrc.push(task.source);
@@ -214,15 +215,28 @@ const outputTasks = () => {
         for (const y in list) {
           const task = list[y];
           const itemDate = moment(task.touched);
-          const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD ');
+          const stamp = cat !== "complete" ? "" : itemDate.format('YYYY-MM-DD ');
           output += `- ${stamp}${task.item}\n`;
         }
+      }
+    } else if (cat === 'complete'){
+      let monthWin = moment().subtract(1,'M');
+      let outVals = Object.values(tasks[cat]).filter(task => {
+        let mom = moment(new Date(task.doneStamp));
+        return mom.isAfter(monthWin);
+      }).sort((a,b)=>(b.doneStamp - a.doneStamp));
+      for (var i in outVals) {
+        const todoItem = outVals[i];
+        const itemDate = moment(todoItem.doneStamp);
+        const stamp = cat !== "complete" ? "" : itemDate.format('YYYY-MM-DD ');
+        let link = todoItem.source ? "[[" + todoItem.source.substring(baseLoc.length + 1, todoItem.source.length - 3) + "]]" : "";
+        output += `- ${stamp}${todoItem.item} ${link}\n`;
       }
     } else {
       for (var i in todosGrp) {
         const todoItem = todosGrp[i];
         const itemDate = moment(todoItem.touched);
-        const stamp = cat !== "done" ? "" : itemDate.format('YYYY-MM-DD ');
+        const stamp = cat !== "complete" ? "" : itemDate.format('YYYY-MM-DD ');
         let link = todoItem.source ? "[[" + todoItem.source.substring(baseLoc.length + 1, todoItem.source.length - 3) + "]]" : "";
         output += `- ${stamp}${todoItem.item} ${link}\n`;
       }
@@ -233,12 +247,12 @@ const outputTasks = () => {
     //        console.log(`writing to ${outPath}`);
     
     try{
-      if (cat === "done") {
-        fs.appendFileSync(outPath, output, "UTF-8");
-      } else {
+      //if (cat === "complete") {
+      //  fs.appendFileSync(outPath, output, "UTF-8");
+      //} else {
         fs.writeFileSync(outPath, output, "UTF-8");
         if (prog.debug && cat === "pending") console.log(`wrote ${output.length} chars to ${capitalize(cat)}`)
-      }
+      //}
     }catch(e){
        console.log(`error ${e} writing to ${capitalize(cat)}`)
     }
@@ -292,8 +306,8 @@ const handleMod = async (fpath) => {
     return;
   }
   const relpath = fpath.substring(baseLoc.length + 1, fpath.length - 3);
-  todos = taskapi.findTasks(text, relpath);
-  await taskapi.markTasks(todos, text, fpath);
+  var todos = taskapi.findTasks(text, relpath);
+  todos = await taskapi.markTasks(todos, text, fpath);
   taskapi.mergeTasks(todos, relpath);
   outputTasks();
   fileCache[fpath] = {
@@ -375,8 +389,8 @@ const main = async () => {
                 throw (err);
               }
               const relpath = fpath.substring(baseLoc.length + 1, fpath.length - 3);
-              const todos = taskapi.findTasks(text, relpath);
-              await taskapi.markTasks(todos, text, fpath);
+              var todos = taskapi.findTasks(text, relpath);
+              todos = await taskapi.markTasks(todos, text, fpath);
               taskapi.mergeTasks(todos, relpath);
 
               outputTasks();
