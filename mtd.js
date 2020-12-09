@@ -9,8 +9,9 @@ const {
 } = require("path");
 
 const todoMarker = /^\s*- \[[ ,x]\]\s+/gm;
-const markMarker = /\((ok|id):([\d,\.]+)\)/gm;
+const markMarker = /\((ok|id):([-]*[\d,\.]+)\)/gm;
 const todoWithTask = /^\s*[-,\*] \[([ ,x])\]\s+(\S.*)$/gm;
+const todoNotDone = /^\s*[-,\*] \[([ ])\]\s+(\S.*)$/gm;
 const todoTitle = /# Todo/gm;
 const nextLine = /\n/gm;
 const tagMarker = /#(\S+)/gm;
@@ -57,6 +58,23 @@ findTags = (input) => {
     const match = matches[i];
     const tag = match[1].substr(1);
     ret.push(match[1]);
+  }
+  return ret;
+};
+
+findNotDone = (input, source) => {
+
+  var ret = [];
+  var match;
+  while (match = todoNotDone.exec(input)) {
+    const done = match[1] == 'x';
+    const idx = todoNotDone.lastIndex - match[2].length;
+    ret.push({
+      "index": idx,
+      "done": done,
+      "item": match[2],
+      "source": source
+    });
   }
   return ret;
 };
@@ -176,7 +194,16 @@ class mtd {
     return (td && td.tagged) ? toMap(td.tagged) : new Map();
   }
 
+
   async markTasks(todos, text, fname) {
+  const hash = (str) => {
+  var hash = 5381,
+      i    = str.length;
+  while(i) {
+    hash = (hash * 33) ^ str.charCodeAt(--i);
+  };
+   return Math.abs(hash);
+  }
     var newText = text;
     var count = 1;
     for (const t in todos) {
@@ -186,7 +213,8 @@ class mtd {
       if (marks["id"]) {
         task.id = marks['id'];
       } else {
-        task.id = `${moment(this.when).format("YYYYMMDD")}.${count}`;
+        const stamp = hash(fname);
+        task.id = `${stamp}.${count}`;
         newItem = `${newItem} (id:${task.id})`;
       }
       if (task.done == true) {
@@ -328,6 +356,9 @@ class mtd {
     }
   }
 
+  findPending (data, name){
+    return findNotDone(data, name).sort((a,b) => (b.index - a.index));
+  }
   findTasks(data, name) {
     // returns them last to first so string replacement is easier
     return findAll(data, name).sort((a, b) => (b.index - a.index));

@@ -103,17 +103,9 @@ const readPath = async (dirLoc, fileCache) => {
       } catch (e) {}
       var lastTouch;
       var isNew = true;
-      if (stats) {
-        lastTouch = fileCache[fPathRelative] && fileCache[fPathRelative].touch;
-        isNew = false;
-      }
       /* Only bother to read the file if its new (not in cache) or
           if the modify timestamp is newer than cached
       */
-      var isOld = lastTouch && lastTouch >= stats.mtime.getTime();
-      if (isOld) {
-        todos = fileCache[fPathRelative].todos;
-      } else {
         let text;
         try {
           if (prog.debug) console.log(`reading file ${fPath}`);
@@ -122,21 +114,10 @@ const readPath = async (dirLoc, fileCache) => {
           console.log(`${err} reading file ${fPath}`);
           throw (err);
         }
-        todos = taskapi.findTasks(text, relPath);
+        todos = taskapi.findPending(text, relPath);
 
         //console.log(fname);
-        if (todos.length > 0) {
-          todos = todos.map((task, n) => {
-            task.touched = stats.mtime.getTime();
-            return task;
-          });
-          fileCache[fPathRelative] = {
-            "touch": stats.mtime.getTime(),
-            "todos": todos
-          };
-        }
         taskapi.markTasks(todos, text, fPath);
-      }
 
     } else if (dirent.isDirectory() && dirent.name !== genDir) {
       // don't bother with the generated directory

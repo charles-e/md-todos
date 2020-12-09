@@ -51,8 +51,6 @@ if (!configDir) {
   }
 }
 const configLoc = `${configDir}/config.toml`;
-const cacheLoc = `${configDir}/cache.json`;
-
 
 console.log(`configLoc ${configLoc}`);
 const config = fs.existsSync(configLoc) ? toml.parse(fs.readFileSync(configLoc, 'utf-8')) : {};
@@ -91,9 +89,6 @@ const readPath = async (dirLoc, fileCache) => {
     const fPath = path.join(baseLoc, fPathRelative);
     const relPath = fPath.substring(baseLoc.length + 1, fPath.length - 3);
     const fname = dirent.name.slice(0, -3);
-    if (fname === 'foo') {
-      debugger;
-    }
     if (dirent.isFile() && dirent.name.endsWith(".md")) {
       var stats;
       try {
@@ -103,10 +98,6 @@ const readPath = async (dirLoc, fileCache) => {
       } catch (e) {}
       var lastTouch;
       var isNew = true;
-      if (stats) {
-        lastTouch = fileCache[fPathRelative] && fileCache[fPathRelative].touch;
-        isNew = false;
-      }
       /* Only bother to read the file if its new (not in cache) or
           if the modify timestamp is newer than cached
       */
@@ -122,20 +113,11 @@ const readPath = async (dirLoc, fileCache) => {
           console.log(`${err} reading file ${fPath}`);
           throw (err);
         }
-        todos = taskapi.findTasks(text, relPath);
-
-        //console.log(fname);
-        if (todos.length > 0) {
-          todos = todos.map((task, n) => {
-            task.touched = stats.mtime.getTime();
-            return task;
-          });
-          fileCache[fPathRelative] = {
-            "touch": stats.mtime.getTime(),
-            "todos": todos
-          };
+        todos = taskapi.findPending(text, relPath);
+        for(var t in todos){
+          console.log(todos[t].item);
         }
-        taskapi.markTasks(todos, text, fPath);
+        //console.log(fname);
       }
 
     } else if (dirent.isDirectory() && dirent.name !== genDir) {

@@ -47,6 +47,7 @@ if (!configDir) {
 }
 const configLoc = `${configDir}/config.toml`;
 const cacheLoc = `${configDir}/cache.json`;
+const stateLoc = `${configDir}/state.json`;
 
 
 if (prog.debug) console.log(`configLoc ${configLoc}`);
@@ -93,6 +94,7 @@ const readPath = async (dirLoc, fileCache) => {
   for await (const dirent of dirInfo) {
     const fPathRelative = path.join(dirLoc, dirent.name);
     const fPath = path.join(baseLoc, fPathRelative);
+    const relPath = fPath.substring(baseLoc.length + 1, fPath.length - 3);
     const fname = dirent.name.slice(0, -3);
     if (fname === 'foo') {
       debugger;
@@ -125,8 +127,7 @@ const readPath = async (dirLoc, fileCache) => {
           console.log(`${err} reading file ${fPath}`);
           throw (err);
         }
-        const tasksPath = path.join(dirLoc, fname);
-        todos = taskapi.findTasks(text, fPath);
+        todos = taskapi.findTasks(text, relPath);
 
         //console.log(fname);
         if (todos.length > 0) {
@@ -141,7 +142,7 @@ const readPath = async (dirLoc, fileCache) => {
         }
         taskapi.markTasks(todos, text, fPath);
       }
-      taskapi.mergeTasks(todos, fname);
+      taskapi.mergeTasks(todos, relPath);
 
     } else if (dirent.isDirectory() && dirent.name !== genDir) {
       // don't bother with the generated directory
@@ -169,7 +170,8 @@ const deleteTodosFor = (todos, forPath) => {
   }
 };
 
-const outputTodos = () => {
+const outputTasks = () => {
+  
   let todos = taskapi.taskData;
   for (const cat in todos) {
 
@@ -207,8 +209,8 @@ const outputTodos = () => {
       for (var x; x < allSrc.length; x++) {
         let source = allSrc[x];
         let list = allTask[x];
-        let src = source.substring(baseLoc.length + 1, source.length - 3);
-        output += `## [[${src}#Tasks|${src}]]\n`;
+        let title = path.basename(source);
+        output += `## [[${source}#Tasks|${title}]]\n`;
         for (const y in list) {
           const task = list[y];
           const itemDate = moment(task.touched);
@@ -229,10 +231,16 @@ const outputTodos = () => {
     //debugger;
     const outPath = path.join(baseLoc, genDir, capitalize(cat)) + ".md";
     //        console.log(`writing to ${outPath}`);
-    if (cat === "done") {
-      fs.appendFileSync(outPath, output, "UTF-8");
-    } else {
-      fs.writeFileSync(outPath, output, "UTF-8");
+    
+    try{
+      if (cat === "done") {
+        fs.appendFileSync(outPath, output, "UTF-8");
+      } else {
+        fs.writeFileSync(outPath, output, "UTF-8");
+        if (prog.debug && cat === "pending") console.log(`wrote ${output.length} chars to ${capitalize(cat)}`)
+      }
+    }catch(e){
+       console.log(`error ${e} writing to ${capitalize(cat)}`)
     }
   }
 }
@@ -243,8 +251,9 @@ const capitalize = (s) => {
 
 const scanAll = async (fileCache) => {
   await readPath(".", fileCache);
-  outputTodos();
+  outputTasks();
   fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
+  fs.writeFileSync(stateLoc, JSON.stringify(taskapi.data), "UTF-8");
 };
 
 var ignoreDirs = [genLoc, dotLoc];
@@ -282,15 +291,17 @@ const handleMod = async (fpath) => {
     console.log(`${err} reading file ${fpath}`);
     return;
   }
-  todos = taskapi.findTasks(text, fpath);
+  const relpath = fpath.substring(baseLoc.length + 1, fpath.length - 3);
+  todos = taskapi.findTasks(text, relpath);
   await taskapi.markTasks(todos, text, fpath);
-  taskapi.mergeTasks(todos, fpath);
-  outputTodos();
+  taskapi.mergeTasks(todos, relpath);
+  outputTasks();
   fileCache[fpath] = {
     "touch": Date.now(),
     "todos": todos
   };
   fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
+  fs.writeFileSync(stateLoc, JSON.stringify(taskapi.data), "UTF-8");
 };
 
 const bgQ = [];
@@ -363,16 +374,18 @@ const main = async () => {
                 console.log(`${err} reading file ${fpath}`);
                 throw (err);
               }
-              const todos = taskapi.findTasks(text, fpath);
+              const relpath = fpath.substring(baseLoc.length + 1, fpath.length - 3);
+              const todos = taskapi.findTasks(text, relpath);
               await taskapi.markTasks(todos, text, fpath);
-              taskapi.mergeTasks(todos, fpath);
+              taskapi.mergeTasks(todos, relpath);
 
-              outputTodos();
+              outputTasks();
               fileCache[fpath] = {
                 "touch": Date.now(),
                 "todos": todos
               };
               fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
+              fs.writeFileSync(stateLoc, JSON.stringify(taskapi.data), "UTF-8");
             }
           }
         })
@@ -394,6 +407,7 @@ const main = async () => {
           }
           delete(fileCache[fpath]);
           fs.writeFileSync(cacheLoc, JSON.stringify(fileCache), "UTF-8");
+          fs.writeFileSync(stateLoc, JSON.stringify(taskapi.data), "UTF-8");
         });
     } catch (err) {
       console.log(`chokidar error ${err}`);
